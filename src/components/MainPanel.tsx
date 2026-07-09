@@ -5,25 +5,29 @@ import ResourcesPanel from "./ResourcesPanel";
 import PromptsPanel from "./PromptsPanel";
 import DiagnosticPanel from "./DiagnosticPanel";
 import ProxyPanel from "./ProxyPanel";
-import { Wrench, FileText, MessageSquare, Stethoscope, Radio, Server } from "lucide-react";
+import RecordingPanel from "./RecordingPanel";
+import { Wrench, FileText, MessageSquare, Stethoscope, Radio, Circle, Server } from "lucide-react";
 import { clsx } from "clsx";
+import { useI18n } from "../i18n";
 
-type Tab = "tools" | "resources" | "prompts" | "diagnostic" | "proxy";
+type Tab = "tools" | "resources" | "prompts" | "diagnostic" | "proxy" | "recording";
 
 const NEEDS_SERVER: Tab[] = ["tools", "resources", "prompts", "diagnostic"];
 
 export default function MainPanel() {
+  const { t } = useI18n();
   const { servers, activeServerId } = useServerStore();
   const [tab, setTab] = useState<Tab>("tools");
 
   const server = activeServerId ? servers[activeServerId] : null;
 
   const tabs: { id: Tab; label: string; icon: typeof Wrench; count?: number }[] = [
-    { id: "tools", label: "工具", icon: Wrench, count: server?.tools.length },
-    { id: "resources", label: "资源", icon: FileText, count: server?.resources.length },
-    { id: "prompts", label: "Prompts", icon: MessageSquare, count: server?.prompts.length },
-    { id: "diagnostic", label: "诊断", icon: Stethoscope },
-    { id: "proxy", label: "MITM 代理", icon: Radio },
+    { id: "tools", label: t("tabs.tools"), icon: Wrench, count: server?.tools.length },
+    { id: "resources", label: t("tabs.resources"), icon: FileText, count: server?.resources.length },
+    { id: "prompts", label: t("tabs.prompts"), icon: MessageSquare, count: server?.prompts.length },
+    { id: "diagnostic", label: t("tabs.diagnostic"), icon: Stethoscope },
+    { id: "proxy", label: t("tabs.proxy"), icon: Radio },
+    { id: "recording", label: t("tabs.recording"), icon: Circle },
   ];
 
   const needsServer = NEEDS_SERVER.includes(tab);
@@ -71,7 +75,7 @@ export default function MainPanel() {
         {needsServer && !server ? (
           <div className="flex flex-col items-center justify-center h-full text-neutral-500 gap-3">
             <Server size={48} className="opacity-20" />
-            <span className="text-sm">从左侧选择或添加一个 MCP 服务器</span>
+            <span className="text-sm">{t("main.selectServer")}</span>
           </div>
         ) : tab === "tools" ? (
           <ToolsPanel />
@@ -83,6 +87,8 @@ export default function MainPanel() {
           <DiagnosticPanel />
         ) : tab === "proxy" ? (
           <ProxyPanel />
+        ) : tab === "recording" ? (
+          <RecordingPanel />
         ) : null}
       </div>
     </div>

@@ -5,12 +5,13 @@ import JsonViewer from "./JsonViewer";
 import {
   Stethoscope, AlertTriangle, CheckCircle, XCircle, Info, Loader2,
   Play, Users, Plus, Settings, ChevronDown, ChevronRight,
-  Hash, ShieldCheck,
+  Hash, ShieldCheck, Sparkles,
 } from "lucide-react";
 import { clsx } from "clsx";
+import { useI18n } from "../i18n";
 import type {
   ToolInfo, LlmConfig, LintReport, InvocationResult, ComparisonResult,
-  SpecReport,
+  SpecReport, DescriptionOptimization,
 } from "../types";
 
 // 预设 LLM 配置
@@ -23,9 +24,10 @@ const LLM_PRESETS: LlmConfig[] = [
   { name: "Kimi-K2", api_format: "open_ai", base_url: "https://api.moonshot.cn/v1", api_key: "", model: "moonshot-v1-auto", temperature: 0.7 },
 ];
 
-type Tab = "lint" | "invoke" | "compare" | "spec";
+type Tab = "lint" | "invoke" | "compare" | "spec" | "description";
 
 export default function DiagnosticPanel() {
+  const { t } = useI18n();
   const { servers, activeServerId } = useServerStore();
   const server = activeServerId ? servers[activeServerId] : null;
   const [tab, setTab] = useState<Tab>("lint");
@@ -35,7 +37,7 @@ export default function DiagnosticPanel() {
     return (
       <div className="flex flex-col items-center justify-center h-full text-neutral-500 gap-2">
         <Stethoscope size={32} className="opacity-20" />
-        <span className="text-sm">暂无可诊断的工具</span>
+        <span className="text-sm">{t("diagnostic.noTools")}</span>
       </div>
     );
   }
@@ -78,7 +80,10 @@ export default function DiagnosticPanel() {
           Layer 4: 多模型对比
         </TabButton>
         <TabButton active={tab === "spec"} onClick={() => setTab("spec")} icon={<ShieldCheck size={14} />}>
-          协议合规
+          {t("diagnostic.spec")}
+        </TabButton>
+        <TabButton active={tab === "description"} onClick={() => setTab("description")} icon={<Sparkles size={14} />}>
+          {t("diagnostic.descOpt")}
         </TabButton>
       </div>
 
@@ -91,11 +96,12 @@ export default function DiagnosticPanel() {
             {tab === "lint" && <LintView tool={tool} />}
             {tab === "invoke" && <InvokeView tool={tool} />}
             {tab === "compare" && <CompareView tool={tool} />}
+            {tab === "description" && <DescriptionOptimizerView tool={tool} />}
           </>
         ) : (
           <div className="flex flex-col items-center justify-center h-full text-neutral-500 gap-2">
             <Stethoscope size={32} className="opacity-20" />
-            <span className="text-sm">点击上方工具名开始诊断</span>
+            <span className="text-sm">{t("diagnostic.selectTool")}</span>
           </div>
         )}
       </div>
@@ -559,6 +565,151 @@ function CompareView({ tool }: { tool: ToolInfo }) {
                 <span className="text-neutral-300">{r.conclusion}</span>
               </div>
             ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function DescriptionOptimizerView({ tool }: { tool: ToolInfo }) {
+  const { t } = useI18n();
+  const [llmConfigs, setLlmConfigs] = useState<LlmConfig[]>([]);
+  const [showConfig, setShowConfig] = useState(false);
+  const [result, setResult] = useState<DescriptionOptimization | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  const selectedConfig = llmConfigs.find((c) => c.api_key);
+  const qualityRaw = result?.quality_score ?? 0;
+  const quality = qualityRaw <= 1 ? Math.round(qualityRaw * 100) : Math.min(100, Math.round(qualityRaw));
+
+  const handleOptimize = async () => {
+    if (!selectedConfig) {
+      alert(t("diagnostic.needLlm"));
+      return;
+    }
+
+    setLoading(true);
+    setResult(null);
+    try {
+      const res = await invoke<DescriptionOptimization>("optimize_tool_description", {
+        llmConfig: selectedConfig,
+        tool,
+      });
+      setResult(res);
+    } catch (e) {
+      alert(`${t("diagnostic.optimizeFailed")}: ${e}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="space-y-3">
+      <div className="rounded-lg border border-neutral-700 bg-neutral-800/50 p-3">
+        <div className="text-xs text-neutral-500">{t("diagnostic.currentTool")}</div>
+        <div className="mt-1 text-sm font-mono text-neutral-100">{tool.name}</div>
+        <div className="mt-2 text-xs text-neutral-500">{t("diagnostic.currentDesc")}</div>
+        <div className="mt-1 whitespace-pre-wrap rounded bg-neutral-900 p-2 text-sm text-neutral-200">
+          {tool.description || t("diagnostic.noDescription")}
+        </div>
+      </div>
+
+      <div className="border border-neutral-700 rounded-lg">
+        <button
+          onClick={() => setShowConfig(!showConfig)}
+          className="flex items-center justify-between w-full px-3 py-2 text-sm text-neutral-300 hover:bg-neutral-800"
+        >
+          <span className="flex items-center gap-2">
+            <Settings size={14} />
+            {t("diagnostic.llmConfig")} ({llmConfigs.filter(c => c.api_key).length}/{llmConfigs.length} 已就绪)
+          </span>
+          {showConfig ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+        </button>
+        {showConfig && (
+          <div className="p-3 border-t border-neutral-700 space-y-2">
+            {LLM_PRESETS.map((preset) => {
+              const existing = llmConfigs.find((c) => c.name === preset.name);
+              return (
+                <div key={preset.name} className="flex items-center gap-2">
+                  <button
+                    onClick={() => {
+                      if (existing) {
+                        setLlmConfigs(llmConfigs.filter((c) => c.name !== preset.name));
+                      } else {
+                        setLlmConfigs([...llmConfigs, { ...preset }]);
+                      }
+                    }}
+                    className={clsx(
+                      "px-2 py-1 rounded text-xs",
+                      existing ? "bg-green-700 text-white" : "bg-neutral-700 text-neutral-400"
+                    )}
+                  >
+                    {existing ? "✓" : "+"} {preset.name}
+                  </button>
+                  {existing && (
+                    <input
+                      type="password"
+                      placeholder="API Key"
+                      value={existing.api_key}
+                      onChange={(e) => {
+                        setLlmConfigs(llmConfigs.map((c) =>
+                          c.name === existing.name ? { ...c, api_key: e.target.value } : c
+                        ));
+                      }}
+                      className="flex-1 px-2 py-1 bg-neutral-900 border border-neutral-700 rounded text-xs text-white"
+                    />
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      <button
+        onClick={handleOptimize}
+        disabled={loading || !selectedConfig}
+        className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 rounded-lg text-white text-sm font-medium"
+      >
+        {loading ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />}
+        {loading ? t("diagnostic.optimizing") : t("diagnostic.optimize")}
+      </button>
+
+      {result && (
+        <div className="space-y-3">
+          <div className="rounded-lg border border-green-700/60 bg-green-900/20 p-3">
+            <div className="mb-1 text-xs text-green-300">{t("diagnostic.optimizedDesc")}</div>
+            <div className="whitespace-pre-wrap text-sm text-neutral-100">{result.optimized}</div>
+          </div>
+
+          <div className="rounded-lg bg-neutral-800 p-3">
+            <div className="mb-1 text-xs text-neutral-400">{t("diagnostic.rationale")}</div>
+            <div className="text-sm text-neutral-200">{result.rationale}</div>
+          </div>
+
+          {result.improvements.length > 0 && (
+            <div className="rounded-lg bg-neutral-800 p-3">
+              <div className="mb-1 text-xs text-neutral-400">{t("diagnostic.improvements")}</div>
+              <div className="space-y-1 text-sm text-neutral-200">
+                {result.improvements.map((item, index) => (
+                  <div key={index}>• {item}</div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div className="rounded-lg bg-neutral-800 p-3">
+            <div className="mb-1 flex items-center justify-between text-xs text-neutral-400">
+              <span>{t("diagnostic.quality")}</span>
+              <span>{quality}%</span>
+            </div>
+            <div className="h-2 overflow-hidden rounded bg-neutral-700">
+              <div
+                className="h-full rounded bg-blue-500 transition-all"
+                style={{ width: `${quality}%` }}
+              />
+            </div>
           </div>
         </div>
       )}

@@ -133,6 +133,35 @@ export interface HttpProxyInfo {
   upstream_url: string;
 }
 
+// --- Recording types ---
+
+export interface RecordedMessage {
+  id: string;
+  timestamp: string;
+  direction: "client_to_server" | "server_to_client";
+  content: any;
+  source: "direct" | "proxy";
+}
+
+export interface SessionRecording {
+  id: string;
+  name: string;
+  server_id: string;
+  server_name: string;
+  started_at: string;
+  ended_at: string | null;
+  messages: RecordedMessage[];
+  metadata: Record<string, string>;
+}
+
+export interface DescriptionOptimization {
+  original: string;
+  optimized: string;
+  rationale: string;
+  improvements: string[];
+  quality_score: number;
+}
+
 // --- Spec Validator types ---
 
 export interface SpecReport {
