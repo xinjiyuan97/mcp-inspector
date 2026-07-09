@@ -1,0 +1,33 @@
+[package]
+name = "tauri-app"
+version = "0.1.0"
+description = "MCP 工坊 — MCP Server 可视化调试工具"
+authors = ["mcp-inspector"]
+edition = "2021"
+
+[lib]
+name = "tauri_app_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-shell = "2"
+tauri-plugin-store = "2"
+tauri-plugin-dialog = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["full"] }
+async-trait = "0.1"
+axum = "0.8"
+hyper = { version = "1", features = ["full"] }
+rmcp = { version = "0.6", features = ["client", "transport-io", "transport-streamable-http-client-reqwest"] }
+reqwest = { version = "0.12", features = ["json"] }
+anyhow = "1"
+thiserror = "2"
+uuid = { version = "1", features = ["v4"] }
+chrono = { version = "0.4", features = ["serde"] }
+tracing = "0.1"
+tracing-subscriber = "0.3"
