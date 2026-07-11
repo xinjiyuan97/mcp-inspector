@@ -86,7 +86,7 @@ jobs:
       - name: Build Tauri app
         run: |
           if [ -n "${{ matrix.target }}" ]; then
-            pnpm tauri build -- --target "${{ matrix.target }}"
+            pnpm tauri build --target "${{ matrix.target }}"
           else
             pnpm tauri build
           fi
