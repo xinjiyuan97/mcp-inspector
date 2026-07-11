@@ -1,0 +1,248 @@
+/* 平台主题变量 */
+:root[data-platform="macos"] {
+  --form-font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+  --form-radius: 6px;
+  --form-radius-sm: 5px;
+  --form-bg: #2c2c2e;
+  --form-bg-hover: #3a3a3c;
+  --form-border: rgba(255, 255, 255, 0.12);
+  --form-border-focus: #0a84ff;
+  --form-text: #f5f5f7;
+  --form-muted: #98989d;
+  --form-accent: #0a84ff;
+  --form-shadow-focus: 0 0 0 3px rgba(10, 132, 255, 0.35);
+  --form-control-height: 28px;
+  --form-padding-x: 8px;
+  --form-padding-y: 5px;
+}
+
+:root[data-platform="windows"] {
+  --form-font: "Segoe UI", system-ui, sans-serif;
+  --form-radius: 2px;
+  --form-radius-sm: 2px;
+  --form-bg: #2d2d30;
+  --form-bg-hover: #3e3e42;
+  --form-border: #5a5a5c;
+  --form-border-focus: #0078d4;
+  --form-text: #ffffff;
+  --form-muted: #c8c8c8;
+  --form-accent: #0078d4;
+  --form-shadow-focus: 0 0 0 1px #0078d4;
+  --form-control-height: 32px;
+  --form-padding-x: 10px;
+  --form-padding-y: 6px;
+}
+
+:root[data-platform="linux"] {
+  --form-font: system-ui, "Ubuntu", "Cantarell", sans-serif;
+  --form-radius: 4px;
+  --form-radius-sm: 4px;
+  --form-bg: #303030;
+  --form-bg-hover: #3d3d3d;
+  --form-border: #5e5e5e;
+  --form-border-focus: #3584e4;
+  --form-text: #ffffff;
+  --form-muted: #b0b0b0;
+  --form-accent: #3584e4;
+  --form-shadow-focus: 0 0 0 2px rgba(53, 132, 228, 0.45);
+  --form-control-height: 30px;
+  --form-padding-x: 10px;
+  --form-padding-y: 6px;
+}
+
+/* React Aria 表单基础样式 */
+.ra-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex-shrink: 0;
+  max-width: 42rem;
+}
+
+.ra-label {
+  font-family: var(--form-font);
+  font-size: 12px;
+  color: var(--form-muted);
+}
+
+.ra-label-name {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: var(--form-text);
+}
+
+.ra-description {
+  font-family: var(--form-font);
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--form-muted);
+}
+
+.ra-input,
+.ra-textarea,
+.ra-select-trigger {
+  width: 100%;
+  box-sizing: border-box;
+  flex-shrink: 0;
+  min-height: var(--form-control-height);
+  padding: var(--form-padding-y) var(--form-padding-x);
+  border: 1px solid var(--form-border);
+  border-radius: var(--form-radius);
+  background: var(--form-bg);
+  color: var(--form-text);
+  font-family: var(--form-font);
+  font-size: 13px;
+  outline: none;
+  transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
+}
+
+.ra-textarea {
+  min-height: 88px;
+  resize: vertical;
+  line-height: 1.45;
+}
+
+.ra-field .react-aria-TextField,
+.ra-field .react-aria-Select {
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  width: 100%;
+}
+
+.ra-input[data-focused],
+.ra-textarea[data-focused],
+.ra-select-trigger[data-focused] {
+  border-color: var(--form-border-focus);
+  box-shadow: var(--form-shadow-focus);
+}
+
+.ra-input[data-hovered],
+.ra-textarea[data-hovered],
+.ra-select-trigger[data-hovered] {
+  background: var(--form-bg-hover);
+}
+
+.ra-select-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: default;
+}
+
+.ra-select-value {
+  color: var(--form-text);
+}
+
+.ra-select-value[data-placeholder] {
+  color: var(--form-muted);
+}
+
+.ra-popover {
+  border: 1px solid var(--form-border);
+  border-radius: var(--form-radius);
+  background: var(--form-bg);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  overflow: hidden;
+}
+
+.ra-listbox {
+  outline: none;
+  max-height: 240px;
+  overflow: auto;
+  padding: 4px;
+}
+
+.ra-listbox-item {
+  padding: 6px 10px;
+  border-radius: var(--form-radius-sm);
+  font-family: var(--form-font);
+  font-size: 13px;
+  color: var(--form-text);
+  cursor: default;
+  outline: none;
+}
+
+.ra-listbox-item[data-focused] {
+  background: var(--form-bg-hover);
+}
+
+.ra-listbox-item[data-selected] {
+  background: color-mix(in srgb, var(--form-accent) 24%, transparent);
+  color: var(--form-text);
+}
+
+/* Checkbox / Switch */
+.ra-checkbox,
+.ra-switch {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--form-font);
+  font-size: 13px;
+  color: var(--form-text);
+}
+
+.ra-checkbox-box {
+  width: 16px;
+  height: 16px;
+  border: 1px solid var(--form-border);
+  border-radius: var(--form-radius-sm);
+  background: var(--form-bg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: transparent;
+  font-size: 11px;
+  line-height: 1;
+}
+
+.ra-checkbox[data-selected] .ra-checkbox-box {
+  border-color: var(--form-accent);
+  background: var(--form-accent);
+  color: white;
+}
+
+.ra-switch-track {
+  width: 40px;
+  height: 22px;
+  border-radius: 999px;
+  background: #555;
+  position: relative;
+  transition: background 0.2s;
+  flex-shrink: 0;
+}
+
+.ra-switch[data-selected] .ra-switch-track {
+  background: var(--form-accent);
+}
+
+.ra-switch-thumb {
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  background: white;
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  transition: transform 0.2s;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+}
+
+.ra-switch[data-selected] .ra-switch-thumb {
+  transform: translateX(18px);
+}
+
+.ra-link-button {
+  font-family: var(--form-font);
+  font-size: 12px;
+  color: var(--form-muted);
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+}
+
+.ra-link-button:hover {
+  color: var(--form-text);
+}

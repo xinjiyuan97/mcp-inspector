@@ -14,6 +14,15 @@ export default function AddServerModal({ onClose }: { onClose: () => void }) {
   const [error, setError] = useState<string | null>(null);
   const [connecting, setConnecting] = useState(false);
 
+  const applyCodexPreset = () => {
+    setName("Codex");
+    setTransport("Stdio");
+    setCommand("codex");
+    setArgs("mcp-server");
+    setUrl("");
+    setError(null);
+  };
+
   const handleConnect = async () => {
     if (!name.trim()) {
       setError("请输入服务器名称");
@@ -95,6 +104,12 @@ export default function AddServerModal({ onClose }: { onClose: () => void }) {
             >
               HTTP
             </button>
+            <button
+              onClick={applyCodexPreset}
+              className="px-3 py-1.5 rounded text-sm bg-neutral-700 hover:bg-neutral-600 ml-auto"
+            >
+              填入 Codex
+            </button>
           </div>
         </div>
 
@@ -165,8 +180,9 @@ export default function AddServerModal({ onClose }: { onClose: () => void }) {
         {/* 示例提示 */}
         <div className="mt-4 pt-4 border-t border-neutral-700 text-xs text-neutral-500">
           <p className="mb-1">常见示例：</p>
-          <p>• 文件系统: <code className="text-neutral-400">npx -y @modelcontextprotocol/server-filesystem /tmp</code></p>
-          <p>• GitHub: <code className="text-neutral-400">npx -y @modelcontextprotocol/server-github</code></p>
+          <p>• 文件系统: 命令 <code className="text-neutral-400">npx</code>，参数 <code className="text-neutral-400">-y @modelcontextprotocol/server-filesystem /tmp</code></p>
+          <p>• GitHub: 命令 <code className="text-neutral-400">npx</code>，参数 <code className="text-neutral-400">-y @modelcontextprotocol/server-github</code></p>
+          <p className="mt-2 text-neutral-600">提示：命令和参数需分开填写；Codex 配置为命令 <code className="text-neutral-400">codex</code>，参数 <code className="text-neutral-400">mcp-server</code>。</p>
         </div>
       </div>
     </div>

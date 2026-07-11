@@ -19,7 +19,7 @@ export default function JsonViewer({
   };
 
   return (
-    <div className="relative border border-neutral-700 rounded overflow-hidden" style={{ maxHeight }}>
+    <div className="relative min-w-0 overflow-hidden border border-neutral-700 rounded" style={{ maxHeight }}>
       <button
         onClick={handleCopy}
         className="absolute top-1 right-1 z-10 px-2 py-0.5 text-xs bg-neutral-700 hover:bg-neutral-600 rounded"
@@ -37,8 +37,14 @@ export default function JsonViewer({
           fontSize: 12,
           lineNumbers: "off",
           scrollBeyondLastLine: false,
-          wordWrap: "on",
+          wordWrap: "off",
           folding: true,
+          scrollbar: {
+            horizontal: "auto",
+            vertical: "auto",
+            handleMouseWheel: true,
+          },
+          overviewRulerLanes: 0,
         }}
       />
     </div>

@@ -12,7 +12,7 @@ export default function Sidebar() {
   const serverList = Object.values(servers);
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex h-full min-h-0 flex-col">
       {/* 标题栏 */}
       <div className="flex items-center justify-between px-3 py-2 border-b border-neutral-700">
         <span className="text-sm font-semibold text-neutral-300">MCP 服务器</span>
@@ -26,7 +26,7 @@ export default function Sidebar() {
       </div>
 
       {/* 服务器列表 */}
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 min-h-0 overflow-y-auto">
         {serverList.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-neutral-500 text-sm gap-2">
             <Server size={32} className="opacity-30" />
@@ -94,6 +94,11 @@ function ServerItem({
         <div className="text-xs text-neutral-500 truncate">
           {config.transport === "Stdio" ? config.command : config.url}
         </div>
+        {isError && (
+          <div className="text-xs text-red-400 truncate" title={status.error}>
+            {status.error}
+          </div>
+        )}
       </div>
 
       {/* 操作按钮 */}

@@ -1,28 +1,20 @@
 import { useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useServerStore } from "../store/serverStore";
+import { useLlmStore } from "../store/llmStore";
+import { useUiStore } from "../store/uiStore";
 import JsonViewer from "./JsonViewer";
+import { LlmConfigSelector } from "./LlmConfigPanel";
 import {
   Stethoscope, AlertTriangle, CheckCircle, XCircle, Info, Loader2,
-  Play, Users, Plus, Settings, ChevronDown, ChevronRight,
-  Hash, ShieldCheck, Sparkles,
+  Play, Users, Hash, ShieldCheck, Sparkles,
 } from "lucide-react";
 import { clsx } from "clsx";
 import { useI18n } from "../i18n";
 import type {
-  ToolInfo, LlmConfig, LintReport, InvocationResult, ComparisonResult,
+  ToolInfo, LintReport, InvocationResult, ComparisonResult,
   SpecReport, DescriptionOptimization,
 } from "../types";
-
-// 预设 LLM 配置
-const LLM_PRESETS: LlmConfig[] = [
-  { name: "GPT-4o", api_format: "open_ai", base_url: "https://api.openai.com/v1", api_key: "", model: "gpt-4o", temperature: 0.7 },
-  { name: "DeepSeek-V3", api_format: "open_ai", base_url: "https://api.deepseek.com", api_key: "", model: "deepseek-chat", temperature: 0.7 },
-  { name: "Qwen-Max", api_format: "open_ai", base_url: "https://dashscope.aliyuncs.com/compatible-mode/v1", api_key: "", model: "qwen-max", temperature: 0.7 },
-  { name: "GLM-4-Plus", api_format: "open_ai", base_url: "https://open.bigmodel.cn/api/paas/v4", api_key: "", model: "glm-4-plus", temperature: 0.7 },
-  { name: "Claude-3.5-Sonnet", api_format: "anthropic", base_url: "https://api.anthropic.com/v1", api_key: "", model: "claude-3-5-sonnet-20241022", temperature: 0.7 },
-  { name: "Kimi-K2", api_format: "open_ai", base_url: "https://api.moonshot.cn/v1", api_key: "", model: "moonshot-v1-auto", temperature: 0.7 },
-];
 
 type Tab = "lint" | "invoke" | "compare" | "spec" | "description";
 
@@ -32,10 +24,11 @@ export default function DiagnosticPanel() {
   const server = activeServerId ? servers[activeServerId] : null;
   const [tab, setTab] = useState<Tab>("lint");
   const [selectedTool, setSelectedTool] = useState<string | null>(null);
+  const openSettings = useUiStore((s) => s.openSettings);
 
   if (!server || server.tools.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center h-full text-neutral-500 gap-2">
+      <div className="flex flex-1 flex-col items-center justify-center text-neutral-500 gap-2">
         <Stethoscope size={32} className="opacity-20" />
         <span className="text-sm">{t("diagnostic.noTools")}</span>
       </div>
@@ -46,7 +39,7 @@ export default function DiagnosticPanel() {
   const tool = selectedTool ? tools.find((t) => t.name === selectedTool) : null;
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-1 min-h-0 flex-col">
       {/* 工具选择 */}
       <div className="p-3 border-b border-neutral-700">
         <div className="text-xs text-neutral-500 mb-2">选择工具进行诊断</div>
@@ -88,18 +81,18 @@ export default function DiagnosticPanel() {
       </div>
 
       {/* 内容区 */}
-      <div className="flex-1 overflow-y-auto p-3">
+      <div className="flex-1 min-h-0 overflow-y-auto p-3">
         {tab === "spec" ? (
           <SpecValidatorView />
         ) : tool ? (
           <>
             {tab === "lint" && <LintView tool={tool} />}
-            {tab === "invoke" && <InvokeView tool={tool} />}
-            {tab === "compare" && <CompareView tool={tool} />}
-            {tab === "description" && <DescriptionOptimizerView tool={tool} />}
+            {tab === "invoke" && <InvokeView tool={tool} onOpenSettings={openSettings} />}
+            {tab === "compare" && <CompareView tool={tool} onOpenSettings={openSettings} />}
+            {tab === "description" && <DescriptionOptimizerView tool={tool} onOpenSettings={openSettings} />}
           </>
         ) : (
-          <div className="flex flex-col items-center justify-center h-full text-neutral-500 gap-2">
+          <div className="flex flex-1 flex-col items-center justify-center text-neutral-500 gap-2">
             <Stethoscope size={32} className="opacity-20" />
             <span className="text-sm">{t("diagnostic.selectTool")}</span>
           </div>
@@ -224,14 +217,13 @@ function LintView({ tool }: { tool: ToolInfo }) {
 // Layer 3: 调用测试
 // =========================================================================
 
-function InvokeView({ tool }: { tool: ToolInfo }) {
-  const [llmConfigs, setLlmConfigs] = useState<LlmConfig[]>([]);
-  const [showConfig, setShowConfig] = useState(false);
+function InvokeView({ tool, onOpenSettings }: { tool: ToolInfo; onOpenSettings: () => void }) {
+  const getActiveConfig = useLlmStore((s) => s.getActiveConfig);
   const [prompt, setPrompt] = useState(`请使用 ${tool.name} 工具来完成相关任务`);
   const [result, setResult] = useState<InvocationResult | null>(null);
   const [loading, setLoading] = useState(false);
 
-  const selectedConfig = llmConfigs.find((c) => c.api_key);
+  const selectedConfig = getActiveConfig();
 
   const handleTest = async () => {
     if (!selectedConfig) return;
@@ -260,58 +252,7 @@ function InvokeView({ tool }: { tool: ToolInfo }) {
 
   return (
     <div className="space-y-3">
-      {/* LLM 配置区 */}
-      <div className="border border-neutral-700 rounded-lg">
-        <button
-          onClick={() => setShowConfig(!showConfig)}
-          className="flex items-center justify-between w-full px-3 py-2 text-sm text-neutral-300 hover:bg-neutral-800"
-        >
-          <span className="flex items-center gap-2">
-            <Settings size={14} />
-            LLM 配置 ({llmConfigs.filter(c => c.api_key).length}/{llmConfigs.length} 已就绪)
-          </span>
-          {showConfig ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-        </button>
-        {showConfig && (
-          <div className="p-3 border-t border-neutral-700 space-y-2">
-            {LLM_PRESETS.map((preset) => {
-              const existing = llmConfigs.find((c) => c.name === preset.name);
-              return (
-                <div key={preset.name} className="flex items-center gap-2">
-                  <button
-                    onClick={() => {
-                      if (existing) {
-                        setLlmConfigs(llmConfigs.filter((c) => c.name !== preset.name));
-                      } else {
-                        setLlmConfigs([...llmConfigs, { ...preset }]);
-                      }
-                    }}
-                    className={clsx(
-                      "px-2 py-1 rounded text-xs",
-                      existing ? "bg-green-700 text-white" : "bg-neutral-700 text-neutral-400"
-                    )}
-                  >
-                    {existing ? "✓" : "+"} {preset.name}
-                  </button>
-                  {existing && (
-                    <input
-                      type="password"
-                      placeholder="API Key"
-                      value={existing.api_key}
-                      onChange={(e) => {
-                        setLlmConfigs(llmConfigs.map((c) =>
-                          c.name === existing.name ? { ...c, api_key: e.target.value } : c
-                        ));
-                      }}
-                      className="flex-1 px-2 py-1 bg-neutral-900 border border-neutral-700 rounded text-xs text-white"
-                    />
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
+      <LlmConfigSelector mode="single" onOpenSettings={onOpenSettings} />
 
       {/* Prompt 输入 */}
       <div>
@@ -414,14 +355,13 @@ function Metric({ label, value, ok }: { label: string; value: string; ok: boolea
 // Layer 4: 多模型对比
 // =========================================================================
 
-function CompareView({ tool }: { tool: ToolInfo }) {
-  const [llmConfigs, setLlmConfigs] = useState<LlmConfig[]>([]);
-  const [showConfig, setShowConfig] = useState(false);
+function CompareView({ tool, onOpenSettings }: { tool: ToolInfo; onOpenSettings: () => void }) {
+  const getReadyEnabledConfigs = useLlmStore((s) => s.getReadyEnabledConfigs);
   const [prompt, setPrompt] = useState(`请使用 ${tool.name} 工具来完成相关任务`);
   const [result, setResult] = useState<ComparisonResult | null>(null);
   const [loading, setLoading] = useState(false);
 
-  const readyConfigs = llmConfigs.filter((c) => c.api_key);
+  const readyConfigs = getReadyEnabledConfigs();
 
   const handleCompare = async () => {
     if (readyConfigs.length < 2) return;
@@ -448,59 +388,7 @@ function CompareView({ tool }: { tool: ToolInfo }) {
 
   return (
     <div className="space-y-3">
-      {/* LLM 选择 */}
-      <div className="border border-neutral-700 rounded-lg">
-        <button
-          onClick={() => setShowConfig(!showConfig)}
-          className="flex items-center justify-between w-full px-3 py-2 text-sm text-neutral-300 hover:bg-neutral-800"
-        >
-          <span className="flex items-center gap-2">
-            <Users size={14} />
-            选择对比模型 ({readyConfigs.length} 已就绪)
-          </span>
-          {showConfig ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-        </button>
-        {showConfig && (
-          <div className="p-3 border-t border-neutral-700 grid grid-cols-2 gap-2">
-            {LLM_PRESETS.map((preset) => {
-              const existing = llmConfigs.find((c) => c.name === preset.name);
-              return (
-                <div key={preset.name} className="flex flex-col gap-1">
-                  <button
-                    onClick={() => {
-                      if (existing) {
-                        setLlmConfigs(llmConfigs.filter((c) => c.name !== preset.name));
-                      } else {
-                        setLlmConfigs([...llmConfigs, { ...preset }]);
-                      }
-                    }}
-                    className={clsx(
-                      "flex items-center gap-2 px-2 py-1 rounded text-xs text-left",
-                      existing ? "bg-green-700/50 text-green-300" : "bg-neutral-700 text-neutral-400"
-                    )}
-                  >
-                    {existing ? <CheckCircle size={12} /> : <Plus size={12} />}
-                    {preset.name}
-                  </button>
-                  {existing && (
-                    <input
-                      type="password"
-                      placeholder="API Key"
-                      value={existing.api_key}
-                      onChange={(e) => {
-                        setLlmConfigs(llmConfigs.map((c) =>
-                          c.name === existing.name ? { ...c, api_key: e.target.value } : c
-                        ));
-                      }}
-                      className="px-2 py-0.5 bg-neutral-900 border border-neutral-700 rounded text-xs text-white"
-                    />
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
+      <LlmConfigSelector mode="compare" onOpenSettings={onOpenSettings} />
 
       {/* Prompt */}
       <textarea
@@ -572,14 +460,19 @@ function CompareView({ tool }: { tool: ToolInfo }) {
   );
 }
 
-function DescriptionOptimizerView({ tool }: { tool: ToolInfo }) {
+function DescriptionOptimizerView({
+  tool,
+  onOpenSettings,
+}: {
+  tool: ToolInfo;
+  onOpenSettings: () => void;
+}) {
   const { t } = useI18n();
-  const [llmConfigs, setLlmConfigs] = useState<LlmConfig[]>([]);
-  const [showConfig, setShowConfig] = useState(false);
+  const getActiveConfig = useLlmStore((s) => s.getActiveConfig);
   const [result, setResult] = useState<DescriptionOptimization | null>(null);
   const [loading, setLoading] = useState(false);
 
-  const selectedConfig = llmConfigs.find((c) => c.api_key);
+  const selectedConfig = getActiveConfig();
   const qualityRaw = result?.quality_score ?? 0;
   const quality = qualityRaw <= 1 ? Math.round(qualityRaw * 100) : Math.min(100, Math.round(qualityRaw));
 
@@ -615,57 +508,7 @@ function DescriptionOptimizerView({ tool }: { tool: ToolInfo }) {
         </div>
       </div>
 
-      <div className="border border-neutral-700 rounded-lg">
-        <button
-          onClick={() => setShowConfig(!showConfig)}
-          className="flex items-center justify-between w-full px-3 py-2 text-sm text-neutral-300 hover:bg-neutral-800"
-        >
-          <span className="flex items-center gap-2">
-            <Settings size={14} />
-            {t("diagnostic.llmConfig")} ({llmConfigs.filter(c => c.api_key).length}/{llmConfigs.length} 已就绪)
-          </span>
-          {showConfig ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-        </button>
-        {showConfig && (
-          <div className="p-3 border-t border-neutral-700 space-y-2">
-            {LLM_PRESETS.map((preset) => {
-              const existing = llmConfigs.find((c) => c.name === preset.name);
-              return (
-                <div key={preset.name} className="flex items-center gap-2">
-                  <button
-                    onClick={() => {
-                      if (existing) {
-                        setLlmConfigs(llmConfigs.filter((c) => c.name !== preset.name));
-                      } else {
-                        setLlmConfigs([...llmConfigs, { ...preset }]);
-                      }
-                    }}
-                    className={clsx(
-                      "px-2 py-1 rounded text-xs",
-                      existing ? "bg-green-700 text-white" : "bg-neutral-700 text-neutral-400"
-                    )}
-                  >
-                    {existing ? "✓" : "+"} {preset.name}
-                  </button>
-                  {existing && (
-                    <input
-                      type="password"
-                      placeholder="API Key"
-                      value={existing.api_key}
-                      onChange={(e) => {
-                        setLlmConfigs(llmConfigs.map((c) =>
-                          c.name === existing.name ? { ...c, api_key: e.target.value } : c
-                        ));
-                      }}
-                      className="flex-1 px-2 py-1 bg-neutral-900 border border-neutral-700 rounded text-xs text-white"
-                    />
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
+      <LlmConfigSelector mode="single" onOpenSettings={onOpenSettings} />
 
       <button
         onClick={handleOptimize}
@@ -729,7 +572,7 @@ function SpecValidatorView() {
 
   if (!server) {
     return (
-      <div className="flex flex-col items-center justify-center h-full text-neutral-500 gap-2">
+      <div className="flex flex-1 flex-col items-center justify-center text-neutral-500 gap-2">
         <ShieldCheck size={32} className="opacity-20" />
         <span className="text-sm">请先连接 MCP 服务器</span>
       </div>

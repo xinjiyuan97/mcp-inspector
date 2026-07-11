@@ -8,9 +8,16 @@ pnpm-debug.log*
 lerna-debug.log*
 
 node_modules
+.pnpm-store
 dist
 dist-ssr
 *.local
+
+# Lockfiles from other package managers (project uses pnpm)
+package-lock.json
+
+# Rust / Tauri
+src-tauri/target
 
 # Editor directories and files
 .vscode/*

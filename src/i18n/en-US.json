@@ -4,6 +4,7 @@
 
   "sidebar.servers": "Servers",
   "sidebar.addServer": "Add Server",
+  "sidebar.settings": "Settings",
   "sidebar.connecting": "Connecting...",
   "sidebar.connected": "Connected",
   "sidebar.disconnected": "Disconnected",
@@ -15,6 +16,7 @@
   "tabs.diagnostic": "Diagnostic",
   "tabs.proxy": "MITM Proxy",
   "tabs.recording": "Recording",
+  "tabs.settings": "Settings",
   "main.selectServer": "Select or add an MCP server from the left",
 
   "tools.empty": "No tools available",
@@ -128,5 +130,31 @@
   "common.unknown": "Unknown",
   "common.error": "Error",
   "common.success": "Success",
-  "common.retry": "Retry"
+  "common.retry": "Retry",
+
+  "settings.title": "Settings",
+  "settings.open": "Go to Settings",
+  "settings.llm.title": "Model Configuration",
+  "settings.llm.summary": "{ready}/{total} models ready",
+  "settings.llm.presets": "Quick Add Presets",
+  "settings.llm.configured": "Configured Models",
+  "settings.llm.empty": "No models configured yet. Add from presets or create a custom one.",
+  "settings.llm.addCustom": "Add Custom Model",
+  "settings.llm.ready": "Ready",
+  "settings.llm.missingKey": "Missing Key",
+  "settings.llm.default": "Default",
+  "settings.llm.setDefault": "Set as Default",
+  "settings.llm.displayName": "Display Name",
+  "settings.llm.apiFormat": "API Format",
+  "settings.llm.model": "Model ID",
+  "settings.llm.temperature": "Temperature",
+  "settings.llm.baseUrl": "Base URL",
+  "settings.llm.apiKey": "API Key",
+  "settings.llm.selectModel": "Select Test Model",
+  "settings.llm.usingModel": "Using model",
+  "settings.llm.compareModels": "Models to Compare",
+  "settings.llm.enableHint": "Enable at least 2 models with API keys",
+  "settings.llm.notConfigured": "Configure LLM models in Settings first",
+  "settings.llm.unsaved": "Unsaved",
+  "settings.llm.saved": "Saved"
 }

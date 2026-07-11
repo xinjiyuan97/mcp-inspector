@@ -2,6 +2,26 @@ import { create } from "zustand";
 import { invoke } from "@tauri-apps/api/core";
 import type { ServerConfig, ToolInfo, ResourceInfo, PromptInfo, MessageLog, ConnectionStatus } from "../types";
 
+async function invokeWithTimeout<T>(
+  command: string,
+  args: Record<string, unknown>,
+  timeoutSecs: number,
+): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timer = setTimeout(
+      () => reject(new Error(`连接超时（${timeoutSecs} 秒）`)),
+      timeoutSecs * 1000,
+    );
+  });
+
+  try {
+    return await Promise.race([invoke<T>(command, args), timeoutPromise]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
 interface ServerEntry {
   config: ServerConfig;
   status: ConnectionStatus;
@@ -65,17 +85,22 @@ export const useServerStore = create<ServerState>((set, get) => ({
     }));
 
     try {
-      await invoke("connect_server", { config });
+      await invokeWithTimeout("connect_server", { config }, config.timeout);
       set((state) => ({
         servers: {
           ...state.servers,
           [config.id]: { ...state.servers[config.id], status: "connected" },
         },
       }));
-      // 连接成功后自动加载 tools/resources/prompts
-      await get().refreshTools(config.id);
-      await get().refreshResources(config.id);
-      await get().refreshPrompts(config.id);
+      set({ activeServerId: config.id });
+      // 先加载 tools，再加载其他元数据；并行调用会因共享连接锁导致 Codex 等服务器卡住 tools
+      void (async () => {
+        await get().refreshTools(config.id);
+        await Promise.all([
+          get().refreshResources(config.id),
+          get().refreshPrompts(config.id),
+        ]);
+      })();
     } catch (e) {
       set((state) => ({
         servers: {
@@ -101,7 +126,14 @@ export const useServerStore = create<ServerState>((set, get) => ({
     }));
   },
 
-  setActiveServer: (id) => set({ activeServerId: id }),
+  setActiveServer: (id) => {
+    set({ activeServerId: id });
+    if (!id) return;
+    const entry = get().servers[id];
+    if (entry?.status === "connected" && entry.tools.length === 0) {
+      void get().refreshTools(id);
+    }
+  },
 
   refreshTools: async (id) => {
     try {

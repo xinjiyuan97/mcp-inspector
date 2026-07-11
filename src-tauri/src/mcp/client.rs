@@ -9,6 +9,7 @@
 
 use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
+use std::time::Duration;
 
 use rmcp::model::{
     CallToolRequestParam, GetPromptRequestParam, ReadResourceRequestParam,
@@ -23,10 +24,13 @@ use super::types::{
     PromptArgument, PromptInfo, ResourceInfo, ServerConfig, ToolInfo,
 };
 
+/// 非 tools 类 RPC 超时（秒）。部分 server（如 Codex）不支持 resources/prompts，避免永久阻塞连接锁。
+const OPTIONAL_RPC_TIMEOUT_SECS: u64 = 10;
+
 /// 单个 MCP server 的连接：持有 rmcp service 与（stdio 模式下的）子进程。
 struct McpConnection {
-    /// 正在运行的 client service。Deref 到 `Peer<RoleClient>`，可用于 list/call。
-    service: RunningService<rmcp::RoleClient, ()>,
+    /// 正在运行的 client service，独立加锁避免阻塞连接管理器。
+    service: Arc<Mutex<RunningService<rmcp::RoleClient, ()>>>,
     /// stdio 模式下的子进程；disconnect 时 kill 并 wait，避免僵尸进程。
     child: Option<Child>,
     /// 缓存的 server 名称（来自 initialize 响应 server_info.server_info.name）。
@@ -88,7 +92,7 @@ impl McpClientManager {
             .unwrap_or(serde_json::json!({}));
 
         let conn = McpConnection {
-            service: established.service,
+            service: Arc::new(Mutex::new(established.service)),
             child: established.child,
             server_name,
             server_version,
@@ -124,15 +128,22 @@ impl McpClientManager {
     /// 在持锁期间完成单次 RPC 调用。
     async fn with_service<F, R>(&self, id: &str, f: F) -> Result<R, String>
     where
-        F: for<'a> FnOnce(&'a RunningService<rmcp::RoleClient, ()>) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<R, ServiceError>> + Send + 'a>>
-            + Send,
+        F: for<'a> FnOnce(
+                &'a RunningService<rmcp::RoleClient, ()>,
+            ) -> std::pin::Pin<
+                Box<dyn std::future::Future<Output = Result<R, ServiceError>> + Send + 'a>,
+            > + Send,
         R: Send,
     {
-        let mut conns = self.connections.lock().await;
-        let conn = conns
-            .get_mut(id)
-            .ok_or_else(|| format!("no connection with id '{id}'"))?;
-        f(&conn.service).await.map_err(|e| e.to_string())
+        let service = {
+            let conns = self.connections.lock().await;
+            let conn = conns
+                .get(id)
+                .ok_or_else(|| format!("no connection with id '{id}'"))?;
+            conn.service.clone()
+        };
+        let guard = service.lock().await;
+        f(&*guard).await.map_err(|e| e.to_string())
     }
 
     /// 列出指定 server 的所有 tools。
@@ -180,13 +191,24 @@ impl McpClientManager {
 
     /// 列出指定 server 的所有 resources。
     pub async fn list_resources(&self, id: &str) -> Result<Vec<ResourceInfo>, String> {
-        self.with_service(id, |service| {
-            Box::pin(async move {
-                let resources = service.list_all_resources().await?;
-                Ok(resources.into_iter().map(resource_into_info).collect())
-            })
-        })
+        let id_owned = id.to_owned();
+        match tokio::time::timeout(
+            Duration::from_secs(OPTIONAL_RPC_TIMEOUT_SECS),
+            self.with_service(&id_owned, |service| {
+                Box::pin(async move {
+                    let resources = service.list_all_resources().await?;
+                    Ok(resources.into_iter().map(resource_into_info).collect())
+                })
+            }),
+        )
         .await
+        {
+            Ok(result) => result,
+            Err(_) => {
+                tracing::warn!("list_resources timed out for server '{id}'");
+                Ok(vec![])
+            }
+        }
     }
 
     /// 读取指定 server 的某个 resource（按 URI），返回其文本内容。
@@ -226,13 +248,24 @@ impl McpClientManager {
 
     /// 列出指定 server 的所有 prompts。
     pub async fn list_prompts(&self, id: &str) -> Result<Vec<PromptInfo>, String> {
-        self.with_service(id, |service| {
-            Box::pin(async move {
-                let prompts = service.list_all_prompts().await?;
-                Ok(prompts.into_iter().map(prompt_into_info).collect())
-            })
-        })
+        let id_owned = id.to_owned();
+        match tokio::time::timeout(
+            Duration::from_secs(OPTIONAL_RPC_TIMEOUT_SECS),
+            self.with_service(&id_owned, |service| {
+                Box::pin(async move {
+                    let prompts = service.list_all_prompts().await?;
+                    Ok(prompts.into_iter().map(prompt_into_info).collect())
+                })
+            }),
+        )
         .await
+        {
+            Ok(result) => result,
+            Err(_) => {
+                tracing::warn!("list_prompts timed out for server '{id}'");
+                Ok(vec![])
+            }
+        }
     }
 
     /// 获取指定 server 的某个 prompt（带参数），返回其 JSON 表示。
@@ -331,10 +364,9 @@ impl Default for McpClientManager {
 // ---------------------------------------------------------------------------
 
 async fn close_connection(conn: McpConnection) {
-    // cancel() 会触发 service 内部的 cancellation token，结束 transport task。
-    // 忽略错误——关闭时不应阻塞调用方。
-    if let Err(e) = conn.service.cancel().await {
-        tracing::warn!("error cancelling mcp service: {e}");
+    {
+        let guard = conn.service.lock().await;
+        guard.cancellation_token().cancel();
     }
     if let Some(mut child) = conn.child {
         // 尽力 kill 子进程，避免泄漏。
@@ -490,14 +522,35 @@ type _UnusedVecDeque<T> = VecDeque<T>;
 // ===========================================================================
 
 use crate::AppState;
+use super::logging::{log_error, log_request, log_response};
+use serde_json::json;
 
 /// 连接到一个 MCP server。
 #[tauri::command]
 pub async fn connect_server(
+    app: tauri::AppHandle,
     state: tauri::State<'_, AppState>,
     config: ServerConfig,
 ) -> Result<(), String> {
-    state.mcp.connect(&config).await
+    let start = log_request(
+        &app,
+        "initialize",
+        json!({
+            "serverId": config.id,
+            "name": config.name,
+            "transport": config.transport,
+        }),
+    );
+    match state.mcp.connect(&config).await {
+        Ok(()) => {
+            log_response(&app, "initialize", start, json!({ "status": "connected" }));
+            Ok(())
+        }
+        Err(e) => {
+            log_error(&app, "initialize", start, &e);
+            Err(e)
+        }
+    }
 }
 
 /// 断开指定 MCP server 连接。
@@ -512,58 +565,160 @@ pub async fn disconnect_server(
 /// 列出指定 server 的所有 tools。
 #[tauri::command]
 pub async fn list_tools(
+    app: tauri::AppHandle,
     state: tauri::State<'_, AppState>,
     server_id: String,
 ) -> Result<Vec<ToolInfo>, String> {
-    state.mcp.list_tools(&server_id).await
+    let start = log_request(&app, "tools/list", json!({ "serverId": server_id }));
+    match state.mcp.list_tools(&server_id).await {
+        Ok(tools) => {
+            log_response(
+                &app,
+                "tools/list",
+                start,
+                json!({ "count": tools.len(), "tools": tools }),
+            );
+            Ok(tools)
+        }
+        Err(e) => {
+            log_error(&app, "tools/list", start, &e);
+            Err(e)
+        }
+    }
 }
 
 /// 调用指定 server 的某个 tool。
 #[tauri::command]
 pub async fn call_tool(
+    app: tauri::AppHandle,
     state: tauri::State<'_, AppState>,
     server_id: String,
     tool_name: String,
     args: serde_json::Value,
 ) -> Result<serde_json::Value, String> {
-    state.mcp.call_tool(&server_id, &tool_name, args).await
+    let start = log_request(
+        &app,
+        "tools/call",
+        json!({
+            "serverId": server_id,
+            "name": tool_name,
+            "arguments": args,
+        }),
+    );
+    match state.mcp.call_tool(&server_id, &tool_name, args).await {
+        Ok(result) => {
+            log_response(&app, "tools/call", start, result.clone());
+            Ok(result)
+        }
+        Err(e) => {
+            log_error(&app, "tools/call", start, &e);
+            Err(e)
+        }
+    }
 }
 
 /// 列出指定 server 的所有 resources。
 #[tauri::command]
 pub async fn list_resources(
+    app: tauri::AppHandle,
     state: tauri::State<'_, AppState>,
     server_id: String,
 ) -> Result<Vec<ResourceInfo>, String> {
-    state.mcp.list_resources(&server_id).await
+    let start = log_request(&app, "resources/list", json!({ "serverId": server_id }));
+    match state.mcp.list_resources(&server_id).await {
+        Ok(resources) => {
+            log_response(
+                &app,
+                "resources/list",
+                start,
+                json!({ "count": resources.len(), "resources": resources }),
+            );
+            Ok(resources)
+        }
+        Err(e) => {
+            log_error(&app, "resources/list", start, &e);
+            Err(e)
+        }
+    }
 }
 
 /// 读取指定 server 的某个 resource。
 #[tauri::command]
 pub async fn read_resource(
+    app: tauri::AppHandle,
     state: tauri::State<'_, AppState>,
     server_id: String,
     uri: String,
 ) -> Result<String, String> {
-    state.mcp.read_resource(&server_id, &uri).await
+    let start = log_request(
+        &app,
+        "resources/read",
+        json!({ "serverId": server_id, "uri": uri }),
+    );
+    match state.mcp.read_resource(&server_id, &uri).await {
+        Ok(content) => {
+            log_response(
+                &app,
+                "resources/read",
+                start,
+                json!({ "uri": uri, "content": content }),
+            );
+            Ok(content)
+        }
+        Err(e) => {
+            log_error(&app, "resources/read", start, &e);
+            Err(e)
+        }
+    }
 }
 
 /// 列出指定 server 的所有 prompts。
 #[tauri::command]
 pub async fn list_prompts(
+    app: tauri::AppHandle,
     state: tauri::State<'_, AppState>,
     server_id: String,
 ) -> Result<Vec<PromptInfo>, String> {
-    state.mcp.list_prompts(&server_id).await
+    let start = log_request(&app, "prompts/list", json!({ "serverId": server_id }));
+    match state.mcp.list_prompts(&server_id).await {
+        Ok(prompts) => {
+            log_response(
+                &app,
+                "prompts/list",
+                start,
+                json!({ "count": prompts.len(), "prompts": prompts }),
+            );
+            Ok(prompts)
+        }
+        Err(e) => {
+            log_error(&app, "prompts/list", start, &e);
+            Err(e)
+        }
+    }
 }
 
 /// 获取指定 server 的某个 prompt。
 #[tauri::command]
 pub async fn get_prompt(
+    app: tauri::AppHandle,
     state: tauri::State<'_, AppState>,
     server_id: String,
     name: String,
     args: HashMap<String, String>,
 ) -> Result<String, String> {
-    state.mcp.get_prompt(&server_id, &name, args).await
+    let start = log_request(
+        &app,
+        "prompts/get",
+        json!({ "serverId": server_id, "name": name, "arguments": args }),
+    );
+    match state.mcp.get_prompt(&server_id, &name, args).await {
+        Ok(result) => {
+            log_response(&app, "prompts/get", start, json!({ "result": result }));
+            Ok(result)
+        }
+        Err(e) => {
+            log_error(&app, "prompts/get", start, &e);
+            Err(e)
+        }
+    }
 }

@@ -119,7 +119,7 @@ export default function RecordingPanel() {
   const replayCount = useMemo(() => replayMessages.length, [replayMessages]);
 
   return (
-    <div className="flex h-full flex-col bg-neutral-900 text-neutral-200">
+    <div className="flex flex-1 min-h-0 flex-col bg-neutral-900 text-neutral-200">
       <div className="flex items-center gap-2 border-b border-neutral-700 p-3">
         {!isRecording ? (
           <button
@@ -161,7 +161,7 @@ export default function RecordingPanel() {
         )}
       </div>
 
-      <div className="grid flex-1 grid-cols-2 overflow-hidden">
+      <div className="grid min-h-0 flex-1 grid-cols-2 overflow-hidden">
         <div className="border-r border-neutral-700 p-3">
           <div className="mb-2 text-sm font-medium text-neutral-300">{t("recording.recordingList")}</div>
           <div className="space-y-2 overflow-y-auto pr-1">

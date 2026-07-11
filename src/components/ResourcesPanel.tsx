@@ -9,7 +9,7 @@ export default function ResourcesPanel() {
 
   if (!server || server.resources.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center h-full text-neutral-500 gap-2">
+      <div className="flex flex-1 flex-col items-center justify-center text-neutral-500 gap-2">
         <FileText size={32} className="opacity-20" />
         <span className="text-sm">暂无资源</span>
       </div>
@@ -17,7 +17,7 @@ export default function ResourcesPanel() {
   }
 
   return (
-    <div className="overflow-y-auto h-full p-3 space-y-1">
+    <div className="flex-1 min-h-0 overflow-y-auto p-3 space-y-1">
       {server.resources.map((res) => (
         <ResourceItem key={res.uri} uri={res.uri} name={res.name} description={res.description} serverId={activeServerId!} />
       ))}

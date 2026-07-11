@@ -1,7 +1,13 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useServerStore } from "../store/serverStore";
+import { useLlmStore } from "../store/llmStore";
 import JsonViewer from "./JsonViewer";
+import ToolForm, {
+  buildInitialValues,
+  parseFormArgs,
+  validateForm,
+} from "./ToolForm";
 import { Play, ChevronDown, ChevronRight, Wrench } from "lucide-react";
 import { clsx } from "clsx";
 import type { ToolInfo } from "../types";
@@ -10,17 +16,37 @@ export default function ToolsPanel() {
   const { servers, activeServerId } = useServerStore();
   const server = activeServerId ? servers[activeServerId] : null;
 
-  if (!server || server.tools.length === 0) {
+  if (!server) {
     return (
-      <div className="flex flex-col items-center justify-center h-full text-neutral-500 gap-2">
+      <div className="flex flex-1 flex-col items-center justify-center gap-2 text-neutral-500">
         <Wrench size={32} className="opacity-20" />
-        <span className="text-sm">暂无工具</span>
+        <span className="text-sm">请选择左侧服务器</span>
+      </div>
+    );
+  }
+
+  if (server.status === "connecting") {
+    return (
+      <div className="flex flex-1 flex-col items-center justify-center gap-2 text-neutral-500">
+        <Wrench size={32} className="opacity-20" />
+        <span className="text-sm">连接中...</span>
+      </div>
+    );
+  }
+
+  if (server.tools.length === 0) {
+    return (
+      <div className="flex flex-1 flex-col items-center justify-center gap-2 text-neutral-500">
+        <Wrench size={32} className="opacity-20" />
+        <span className="text-sm">
+          {server.status === "connected" ? "正在加载工具..." : "暂无工具"}
+        </span>
       </div>
     );
   }
 
   return (
-    <div className="overflow-y-auto h-full p-3 space-y-2">
+    <div className="flex-1 min-h-0 overflow-y-auto p-3 space-y-2">
       {server.tools.map((tool) => (
         <ToolCard key={tool.name} tool={tool} serverId={activeServerId!} />
       ))}
@@ -30,17 +56,32 @@ export default function ToolsPanel() {
 
 function ToolCard({ tool, serverId }: { tool: ToolInfo; serverId: string }) {
   const [expanded, setExpanded] = useState(false);
-  const [args, setArgs] = useState<string>("{}");
+  const defaultModel = useLlmStore((s) => s.getDefaultToolModel());
+  const initialValues = useMemo(
+    () => buildInitialValues(tool.input_schema, defaultModel ? { model: defaultModel } : undefined),
+    [tool.input_schema, defaultModel],
+  );
+  const [formValues, setFormValues] = useState<Record<string, unknown>>(initialValues);
+
+  useEffect(() => {
+    setFormValues(initialValues);
+  }, [initialValues]);
   const [result, setResult] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
   const handleCall = async () => {
+    const validationError = validateForm(formValues, tool.input_schema);
+    if (validationError) {
+      setError(validationError);
+      return;
+    }
+
     setLoading(true);
     setError(null);
     setResult(null);
     try {
-      const parsedArgs = JSON.parse(args);
+      const parsedArgs = parseFormArgs(formValues, tool.input_schema);
       const res = await invoke("call_tool", {
         serverId,
         toolName: tool.name,
@@ -55,8 +96,7 @@ function ToolCard({ tool, serverId }: { tool: ToolInfo; serverId: string }) {
   };
 
   return (
-    <div className="border border-neutral-700 rounded-lg overflow-hidden">
-      {/* 头部 */}
+    <div className="border border-neutral-700 rounded-lg overflow-hidden min-w-0">
       <div
         className="flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-neutral-800"
         onClick={() => setExpanded(!expanded)}
@@ -66,27 +106,10 @@ function ToolCard({ tool, serverId }: { tool: ToolInfo; serverId: string }) {
         <span className="text-xs text-neutral-500 truncate flex-1">{tool.description}</span>
       </div>
 
-      {/* 展开内容 */}
       {expanded && (
-        <div className="px-3 pb-3 space-y-2 border-t border-neutral-700 pt-2">
-          {/* Input Schema */}
-          <div>
-            <div className="text-xs text-neutral-500 mb-1">Input Schema</div>
-            <JsonViewer value={tool.input_schema} maxHeight="200px" />
-          </div>
+        <div className="space-y-3 border-t border-neutral-700 px-3 pb-3 pt-3 min-w-0">
+          <ToolForm schema={tool.input_schema} values={formValues} onChange={setFormValues} />
 
-          {/* 参数输入 */}
-          <div>
-            <div className="text-xs text-neutral-500 mb-1">参数 (JSON)</div>
-            <textarea
-              value={args}
-              onChange={(e) => setArgs(e.target.value)}
-              className="w-full h-20 px-2 py-1 bg-neutral-900 border border-neutral-600 rounded text-sm font-mono focus:outline-none focus:border-blue-500"
-              placeholder="{}"
-            />
-          </div>
-
-          {/* 调用按钮 */}
           <button
             onClick={handleCall}
             disabled={loading}
@@ -99,7 +122,6 @@ function ToolCard({ tool, serverId }: { tool: ToolInfo; serverId: string }) {
             {loading ? "调用中..." : "调用"}
           </button>
 
-          {/* 结果 */}
           {result && (
             <div>
               <div className="text-xs text-green-400 mb-1">结果</div>
@@ -107,7 +129,6 @@ function ToolCard({ tool, serverId }: { tool: ToolInfo; serverId: string }) {
             </div>
           )}
 
-          {/* 错误 */}
           {error && (
             <div className="p-2 bg-red-900/30 border border-red-700 rounded text-sm text-red-300">
               {error}

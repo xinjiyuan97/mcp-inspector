@@ -8,6 +8,7 @@ import {
 import { clsx } from "clsx";
 import type { ProxyInfo, HttpProxyInfo, MessageLog, ServerConfig } from "../types";
 import JsonViewer from "./JsonViewer";
+import { formatMcpServerEntry, proxyEntryName } from "../utils/proxyConfig";
 
 type ProxyTab = "stdio" | "http";
 
@@ -15,7 +16,7 @@ export default function ProxyPanel() {
   const [tab, setTab] = useState<ProxyTab>("stdio");
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-1 min-h-0 flex-col">
       <div className="flex gap-1 p-2 border-b border-neutral-700">
         <button
           onClick={() => setTab("stdio")}
@@ -39,7 +40,7 @@ export default function ProxyPanel() {
         </button>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-3">
+      <div className="flex-1 min-h-0 overflow-y-auto p-3">
         {tab === "stdio" ? <StdioProxyView /> : <HttpProxyView />}
       </div>
     </div>
@@ -183,13 +184,18 @@ function StdioProxyView() {
             {/* Claude Desktop 配置 */}
             <div>
               <div className="text-xs text-neutral-500 mb-1">配置到 Claude Desktop (复制到 mcpServers 中):</div>
-              <div className="relative">
-                <pre className="p-2 bg-neutral-900 rounded text-xs text-green-400 font-mono overflow-x-auto">
-                  {`"proxy": ${proxy.claude_config_snippet}`}
+              <div className="relative min-w-0">
+                <pre className="max-h-48 overflow-auto whitespace-pre-wrap break-all rounded bg-neutral-900 p-2 pr-10 text-xs leading-relaxed text-green-400 font-mono">
+                  {formatMcpServerEntry(proxyEntryName(proxy.port), proxy.claude_config_snippet)}
                 </pre>
                 <button
-                  onClick={() => copyToClipboard(proxy.claude_config_snippet, proxy.id)}
-                  className="absolute top-1 right-1 p-1 bg-neutral-700 rounded hover:bg-neutral-600"
+                  onClick={() =>
+                    copyToClipboard(
+                      formatMcpServerEntry(proxyEntryName(proxy.port), proxy.claude_config_snippet),
+                      proxy.id,
+                    )
+                  }
+                  className="absolute top-1 right-1 rounded bg-neutral-700 p-1 hover:bg-neutral-600"
                 >
                   {copied === proxy.id ? <Check size={12} className="text-green-400" /> : <Copy size={12} className="text-neutral-400" />}
                 </button>
@@ -337,8 +343,8 @@ function HttpProxyView() {
 
             <div>
               <div className="text-xs text-neutral-500 mb-1">将 Claude Desktop / Cursor 的 MCP URL 指向:</div>
-              <div className="relative">
-                <pre className="p-2 bg-neutral-900 rounded text-xs text-green-400 font-mono overflow-x-auto">
+              <div className="relative min-w-0">
+                <pre className="overflow-x-auto whitespace-pre-wrap break-all rounded bg-neutral-900 p-2 pr-10 text-xs leading-relaxed text-green-400 font-mono">
                   {proxy.proxy_url}
                 </pre>
                 <button

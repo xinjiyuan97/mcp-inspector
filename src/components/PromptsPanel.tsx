@@ -9,7 +9,7 @@ export default function PromptsPanel() {
 
   if (!server || server.prompts.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center h-full text-neutral-500 gap-2">
+      <div className="flex flex-1 flex-col items-center justify-center text-neutral-500 gap-2">
         <MessageSquare size={32} className="opacity-20" />
         <span className="text-sm">暂无 Prompts</span>
       </div>
@@ -17,7 +17,7 @@ export default function PromptsPanel() {
   }
 
   return (
-    <div className="overflow-y-auto h-full p-3 space-y-1">
+    <div className="flex-1 min-h-0 overflow-y-auto p-3 space-y-1">
       {server.prompts.map((prompt) => (
         <PromptItem key={prompt.name} name={prompt.name} description={prompt.description} arguments_={prompt.arguments} serverId={activeServerId!} />
       ))}
