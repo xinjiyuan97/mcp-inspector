@@ -326,8 +326,18 @@ impl McpClientManager {
         match method {
             "tools/list" => {
                 let tools = self.list_tools(id).await?;
+                let tools_json: Vec<serde_json::Value> = tools
+                    .iter()
+                    .map(|tool| {
+                        serde_json::json!({
+                            "name": tool.name,
+                            "description": tool.description,
+                            "inputSchema": tool.input_schema,
+                        })
+                    })
+                    .collect();
                 Ok(serde_json::json!({
-                    "result": { "tools": tools }
+                    "result": { "tools": tools_json }
                 }))
             }
             "resources/list" => {

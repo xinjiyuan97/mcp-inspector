@@ -4,15 +4,39 @@ import type { ServerConfig, TransportType } from "../types";
 import { X } from "lucide-react";
 import { v4 as uuidv4 } from "uuid";
 
-export default function AddServerModal({ onClose }: { onClose: () => void }) {
-  const { addServer, connectServer } = useServerStore();
-  const [name, setName] = useState("");
-  const [transport, setTransport] = useState<TransportType>("Stdio");
-  const [command, setCommand] = useState("");
-  const [args, setArgs] = useState("");
-  const [url, setUrl] = useState("");
+function configToForm(config: ServerConfig) {
+  return {
+    name: config.name,
+    transport: config.transport,
+    command: config.command ?? "",
+    args: config.args.join(" "),
+    url: config.url ?? "",
+    timeout: String(config.timeout),
+  };
+}
+
+export default function AddServerModal({
+  onClose,
+  serverId,
+}: {
+  onClose: () => void;
+  serverId?: string;
+}) {
+  const isEdit = Boolean(serverId);
+  const entry = useServerStore((s) => (serverId ? s.servers[serverId] : undefined));
+  const { addServer, updateServer, connectServer, reconnectServer } = useServerStore();
+
+  const initial = entry?.config;
+  const [name, setName] = useState(() => (initial ? configToForm(initial).name : ""));
+  const [transport, setTransport] = useState<TransportType>(
+    () => (initial ? configToForm(initial).transport : "Stdio"),
+  );
+  const [command, setCommand] = useState(() => (initial ? configToForm(initial).command : ""));
+  const [args, setArgs] = useState(() => (initial ? configToForm(initial).args : ""));
+  const [url, setUrl] = useState(() => (initial ? configToForm(initial).url : ""));
+  const [timeout, setTimeoutValue] = useState(() => (initial ? configToForm(initial).timeout : "30"));
   const [error, setError] = useState<string | null>(null);
-  const [connecting, setConnecting] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
   const applyCodexPreset = () => {
     setName("Codex");
@@ -23,43 +47,64 @@ export default function AddServerModal({ onClose }: { onClose: () => void }) {
     setError(null);
   };
 
-  const handleConnect = async () => {
+  const buildConfig = (): ServerConfig | null => {
     if (!name.trim()) {
       setError("请输入服务器名称");
-      return;
+      return null;
     }
-
     if (transport === "Stdio" && !command.trim()) {
       setError("请输入命令");
-      return;
+      return null;
     }
     if (transport === "Http" && !url.trim()) {
       setError("请输入 URL");
-      return;
+      return null;
     }
 
-    const config: ServerConfig = {
-      id: uuidv4(),
+    const timeoutNum = Number(timeout);
+    if (!Number.isFinite(timeoutNum) || timeoutNum <= 0) {
+      setError("超时时间必须是正数");
+      return null;
+    }
+
+    return {
+      id: serverId ?? uuidv4(),
       name: name.trim(),
       transport,
       command: transport === "Stdio" ? command.trim() : undefined,
       args: transport === "Stdio" ? (args.trim() ? args.trim().split(/\s+/) : []) : [],
-      env: {},
+      env: initial?.env ?? {},
       url: transport === "Http" ? url.trim() : undefined,
-      headers: {},
-      timeout: 30,
+      headers: initial?.headers ?? {},
+      timeout: timeoutNum,
     };
+  };
 
-    setConnecting(true);
+  const handleSubmit = async () => {
+    const config = buildConfig();
+    if (!config) return;
+
+    setSubmitting(true);
     setError(null);
-    addServer(config);
+
     try {
+      if (isEdit && serverId) {
+        const wasConnected = entry?.status === "connected";
+        updateServer(serverId, config);
+        if (wasConnected) {
+          await reconnectServer(serverId);
+        }
+        onClose();
+        return;
+      }
+
+      addServer(config);
       await connectServer(config);
       onClose();
     } catch (e) {
       setError(String(e));
     } finally {
-      setConnecting(false);
+      setSubmitting(false);
     }
   };
 
@@ -70,13 +115,12 @@ export default function AddServerModal({ onClose }: { onClose: () => void }) {
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold">添加 MCP 服务器</h2>
+          <h2 className="text-lg font-semibold">{isEdit ? "服务器属性" : "添加 MCP 服务器"}</h2>
           <button onClick={onClose} className="p-1 rounded hover:bg-neutral-700">
             <X size={18} />
           </button>
         </div>
 
-        {/* 名称 */}
         <div className="mb-4">
           <label className="block text-sm text-neutral-400 mb-1">名称</label>
           <input
@@ -88,7 +132,6 @@ export default function AddServerModal({ onClose }: { onClose: () => void }) {
           />
         </div>
 
-        {/* Transport 类型 */}
         <div className="mb-4">
           <label className="block text-sm text-neutral-400 mb-1">传输类型</label>
           <div className="flex gap-2">
@@ -104,16 +147,17 @@ export default function AddServerModal({ onClose }: { onClose: () => void }) {
             >
               HTTP
             </button>
-            <button
-              onClick={applyCodexPreset}
-              className="px-3 py-1.5 rounded text-sm bg-neutral-700 hover:bg-neutral-600 ml-auto"
-            >
-              填入 Codex
-            </button>
+            {!isEdit && (
+              <button
+                onClick={applyCodexPreset}
+                className="px-3 py-1.5 rounded text-sm bg-neutral-700 hover:bg-neutral-600 ml-auto"
+              >
+                填入 Codex
+              </button>
+            )}
           </div>
         </div>
 
-        {/* Stdio 配置 */}
         {transport === "Stdio" && (
           <>
             <div className="mb-4">
@@ -139,7 +183,6 @@ export default function AddServerModal({ onClose }: { onClose: () => void }) {
           </>
         )}
 
-        {/* HTTP 配置 */}
         {transport === "Http" && (
           <div className="mb-4">
             <label className="block text-sm text-neutral-400 mb-1">URL</label>
@@ -153,14 +196,23 @@ export default function AddServerModal({ onClose }: { onClose: () => void }) {
           </div>
         )}
 
-        {/* 错误信息 */}
+        <div className="mb-4">
+          <label className="block text-sm text-neutral-400 mb-1">连接超时（秒）</label>
+          <input
+            type="number"
+            min={1}
+            value={timeout}
+            onChange={(e) => setTimeoutValue(e.target.value)}
+            className="w-full px-3 py-2 bg-neutral-900 border border-neutral-600 rounded text-sm focus:outline-none focus:border-blue-500"
+          />
+        </div>
+
         {error && (
           <div className="mb-4 p-2 bg-red-900/30 border border-red-700 rounded text-sm text-red-300">
             {error}
           </div>
         )}
 
-        {/* 按钮 */}
         <div className="flex justify-end gap-2">
           <button
             onClick={onClose}
@@ -169,21 +221,22 @@ export default function AddServerModal({ onClose }: { onClose: () => void }) {
             取消
           </button>
           <button
-            onClick={handleConnect}
-            disabled={connecting}
+            onClick={handleSubmit}
+            disabled={submitting}
             className="px-4 py-2 rounded text-sm bg-blue-600 hover:bg-blue-500 disabled:opacity-50"
           >
-            {connecting ? "连接中..." : "连接"}
+            {submitting ? (isEdit ? "保存中..." : "连接中...") : isEdit ? "保存" : "连接"}
           </button>
         </div>
 
-        {/* 示例提示 */}
-        <div className="mt-4 pt-4 border-t border-neutral-700 text-xs text-neutral-500">
-          <p className="mb-1">常见示例：</p>
-          <p>• 文件系统: 命令 <code className="text-neutral-400">npx</code>，参数 <code className="text-neutral-400">-y @modelcontextprotocol/server-filesystem /tmp</code></p>
-          <p>• GitHub: 命令 <code className="text-neutral-400">npx</code>，参数 <code className="text-neutral-400">-y @modelcontextprotocol/server-github</code></p>
-          <p className="mt-2 text-neutral-600">提示：命令和参数需分开填写；Codex 配置为命令 <code className="text-neutral-400">codex</code>，参数 <code className="text-neutral-400">mcp-server</code>。</p>
-        </div>
+        {!isEdit && (
+          <div className="mt-4 pt-4 border-t border-neutral-700 text-xs text-neutral-500">
+            <p className="mb-1">常见示例：</p>
+            <p>• 文件系统: 命令 <code className="text-neutral-400">npx</code>，参数 <code className="text-neutral-400">-y @modelcontextprotocol/server-filesystem /tmp</code></p>
+            <p>• GitHub: 命令 <code className="text-neutral-400">npx</code>，参数 <code className="text-neutral-400">-y @modelcontextprotocol/server-github</code></p>
+            <p className="mt-2 text-neutral-600">提示：命令和参数需分开填写；Codex 配置为命令 <code className="text-neutral-400">codex</code>，参数 <code className="text-neutral-400">mcp-server</code>。</p>
+          </div>
+        )}
       </div>
     </div>
   );

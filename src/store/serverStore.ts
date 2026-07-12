@@ -37,8 +37,11 @@ interface ServerState {
 
   addServer: (config: ServerConfig) => void;
   removeServer: (id: string) => void;
+  updateServer: (id: string, config: ServerConfig) => void;
   connectServer: (config: ServerConfig) => Promise<void>;
   disconnectServer: (id: string) => Promise<void>;
+  reconnectServer: (id: string) => Promise<void>;
+  refreshServer: (id: string) => Promise<void>;
   setActiveServer: (id: string | null) => void;
   refreshTools: (id: string) => Promise<void>;
   refreshResources: (id: string) => Promise<void>;
@@ -75,6 +78,17 @@ export const useServerStore = create<ServerState>((set, get) => ({
         activeServerId: state.activeServerId === id ? null : state.activeServerId,
       };
     }),
+
+  updateServer: (id, config) =>
+    set((state) => ({
+      servers: {
+        ...state.servers,
+        [id]: {
+          ...state.servers[id],
+          config: { ...config, id },
+        },
+      },
+    })),
 
   connectServer: async (config) => {
     set((state) => ({
@@ -124,6 +138,25 @@ export const useServerStore = create<ServerState>((set, get) => ({
         [id]: { ...state.servers[id], status: "disconnected", tools: [], resources: [], prompts: [] },
       },
     }));
+  },
+
+  reconnectServer: async (id) => {
+    const entry = get().servers[id];
+    if (!entry) return;
+    if (entry.status === "connected" || entry.status === "connecting") {
+      await get().disconnectServer(id);
+    }
+    await get().connectServer(get().servers[id].config);
+  },
+
+  refreshServer: async (id) => {
+    const entry = get().servers[id];
+    if (!entry || entry.status !== "connected") return;
+    await get().refreshTools(id);
+    await Promise.all([
+      get().refreshResources(id),
+      get().refreshPrompts(id),
+    ]);
   },
 
   setActiveServer: (id) => {
